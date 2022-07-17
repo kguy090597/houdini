@@ -13,6 +13,7 @@
 mod cli;
 mod exploits;
 mod report;
+mod testutils;
 
 pub mod config;
 pub mod docker;
