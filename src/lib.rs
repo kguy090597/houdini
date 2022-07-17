@@ -12,6 +12,7 @@
 
 mod cli;
 mod exploits;
+mod libvirt;
 mod report;
 mod testutils;
 

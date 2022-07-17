@@ -54,6 +54,8 @@ tracing-appender = "0.2.2"
 tracing-log = "0.1.2"
 tracing-subscriber = { version = "0.3.9", features = ["fmt", "std", "json"] }
 tracing-test = "0.2.2"
+url = { version = "2.2.2", features = ["serde"] }
 uuid = "0.8.2"
+virt = "0.2.11"
 
 [features]
