@@ -9,6 +9,7 @@
 
 use std::{
     collections::HashMap,
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -155,12 +156,16 @@ async fn build_image<P: AsRef<Path>>(
     let tag = image.split_once(':').map(|x| x.1).unwrap_or("latest");
 
     let image_options = BuildImageOptions {
-        dockerfile: dockerfile.as_ref().to_str().ok_or_else(|| {
-            anyhow::anyhow!(
-                "dockerfile path invalid `{}`",
-                dockerfile.as_ref().display()
-            )
-        })?,
+        dockerfile: dockerfile
+            .as_ref()
+            .file_name()
+            .and_then(|f| f.to_str())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "dockerfile path invalid `{}`",
+                    dockerfile.as_ref().display()
+                )
+            })?,
         t: tag,
         q: false,
         nocache: false,
@@ -171,7 +176,7 @@ async fn build_image<P: AsRef<Path>>(
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect(),
-        squash: true,
+        squash: false,
         ..Default::default()
     };
 
@@ -182,13 +187,54 @@ async fn build_image<P: AsRef<Path>>(
         )
     })?;
 
+    let dockerignore = build_root.join(".dockerignore");
+    let ignore = dockerignore
+        .exists()
+        .then(|| gitignore::File::new(&dockerignore).ok())
+        .flatten();
+
     let tar_gz = tempfile::Builder::new()
         .suffix(".tar.gz")
         .tempfile()
-        .context("failed to create temporary file")?
-        .into_file();
+        .context("failed to create temporary file")?;
+    let tar_gz = tar_gz
+        .into_temp_path()
+        .keep()
+        .context("failed to persist temporary file")?;
+    let tar_gz = std::fs::File::create(tar_gz).context("failed to open temporary file")?;
+    tracing::trace!(file = ?tar_gz, "created temporary tarball");
+
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
+    jwalk::WalkDir::new(build_root)
+        .skip_hidden(false)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter_map(|p| {
+            let p = p.path();
+            let name = p.strip_prefix(&build_root).unwrap_or(&p);
+            if name.components().take(1).next().is_none() {
+                tracing::trace!(host_path = ?p, tar_path = ?name, "skipping empty filename");
+                return None;
+            }
+            if let Some(ref ignore) = ignore {
+                match ignore.is_excluded(&p) {
+                    Ok(true) => {
+                        tracing::trace!(host_path = ?p, tar_path = ?name, "skipping ignored filename");
+                        return None;
+                    },
+                    Err(e) => return Some(Err(e).map_err(anyhow::Error::from)),
+                    _ => {}
+                }
+            }
+            tracing::debug!(host_path = ?p, tar_path = ?name, "adding file to archive");
+            Some(
+                tar.append_path_with_name(&p, &name)
+                    .with_context(|| format!("failed to add file to tar archive {:?}", &p)),
+            )
+        })
+        .collect::<Result<_>>()?;
     tar.append_dir_all(".", build_root)
         .context("failed to add buildroot to tar archive")?;
     let tar = tar.into_inner().context("failed to write tar archive")?;
@@ -216,4 +262,22 @@ async fn build_image<P: AsRef<Path>>(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tracing_test::traced_test;
+
+    #[tokio::test]
+    #[traced_test]
+    #[serial_test::serial]
+    async fn test_image_build() {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("testdata/imgbuild/Dockerfile");
+
+        build_image("foo", &d, &HashMap::default())
+            .await
+            .expect("image should build");
+    }
 }

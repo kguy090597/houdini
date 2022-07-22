@@ -610,6 +610,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22030e2c5a68ec659fde1e949a745124b48e6fa8b045b7ed5bd1fe4ccc5c4e5d"
 
 [[package]]
+name = "gitignore"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78aa90e4620c1498ac434c06ba6e521b525794bbdacf085d490cc794b4a2f9a4"
+dependencies = [
+ "glob",
+]
+
+[[package]]
+name = "glob"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
+
+[[package]]
 name = "h2"
 version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -673,10 +688,12 @@ dependencies = [
  "directories",
  "flate2",
  "futures",
+ "gitignore",
  "human-panic",
  "humantime-serde",
  "hyper",
  "jwalk",
+ "lazy_static",
  "log-panics",
  "nix",
  "serde",
